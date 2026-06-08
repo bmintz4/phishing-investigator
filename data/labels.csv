@@ -1,0 +1,7 @@
+filename,label,source_dataset,source_type
+phishing_01.txt,phishing,kaggle_phishing_email_dataset,public_dataset
+phishing_02.txt,phishing,kaggle_phishing_email_dataset,public_dataset
+phishing_03.txt,phishing,kaggle_phishing_email_dataset,public_dataset
+legitimate_01.txt,legitimate,kaggle_phishing_email_dataset,public_dataset
+legitimate_02.txt,legitimate,kaggle_phishing_email_dataset,public_dataset
+legitimate_03.txt,legitimate,kaggle_phishing_email_dataset,public_dataset

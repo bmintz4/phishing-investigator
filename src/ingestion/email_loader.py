@@ -31,7 +31,7 @@ def load_sample_emails(labels_path: str, sample_dir: str) -> pd.DataFrame:
             "label": row["label"],
             "source_dataset": row.get("source_dataset", ""),
             "source_type": row.get("source_type", ""),
-            "text": text
+            "text": clean_text(text)
         })
 
     return pd.DataFrame(records)
@@ -43,7 +43,7 @@ def load_pasted_email(raw_text: str) -> dict:
         "label": None,
         "source_dataset": None,
         "source_type": "pasted_text",
-        "text": raw_text.strip()
+        "text": clean_text(raw_text)
     }
 
 

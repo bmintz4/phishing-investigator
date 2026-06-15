@@ -122,7 +122,7 @@ REWARD_OR_REFUND_TERMS = [
 
 
 RULES = [
-    ("urgent_language", "medium", URGENT_TERMS),
+    ("urgent", "medium", URGENT_TERMS),
     ("credential_request", "high", CREDENTIAL_REQUEST_TERMS),
     ("account_verification", "medium", ACCOUNT_VERIFICATION_TERMS),
     ("payment_or_invoice_language", "medium", PAYMENT_OR_INVOICE_TERMS),
@@ -133,9 +133,8 @@ RULES = [
     ("reward_or_refund", "high", REWARD_OR_REFUND_TERMS),
 ]
 
-
+## Return the longest phrase found as a complete phrase in the email
 def _find_phrase(email_text: str, phrases: list[str]) -> str | None:
-    """Return the longest phrase found as a complete phrase in the email."""
     for phrase in sorted(phrases, key=len, reverse=True):
         pattern = rf"(?<!\w){re.escape(phrase)}(?!\w)"
         if re.search(pattern, email_text):
@@ -143,9 +142,8 @@ def _find_phrase(email_text: str, phrases: list[str]) -> str | None:
     return None
 
 
-# Analyze email text for deterministic phishing indicators.
+## Analyze email text for deterministic phishing indicators
 def analyze_rules(email_text: str) -> list[dict]:
-    """Return structured findings for phishing-related phrases."""
     if not isinstance(email_text, str) or not email_text.strip():
         return []
 
@@ -159,7 +157,7 @@ def analyze_rules(email_text: str) -> list[dict]:
                 {
                     "rule": rule_name,
                     "severity": severity,
-                    "evidence": f"Found phrase: {matched_phrase}",
+                    "evidence": matched_phrase,
                 }
             )
 

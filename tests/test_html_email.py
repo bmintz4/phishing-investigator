@@ -1,12 +1,17 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.ingestion.html_email import extract_links, html_to_text
+
+
+SAMPLE_HTML_EMAIL = PROJECT_ROOT / "data" / "sample emails" / "legitimate_html.txt"
 
 
 def test_extract_links_returns_text_and_addresses():
@@ -55,8 +60,10 @@ rd</a>
 
 
 def test_extract_links_decodes_raw_email_html_part():
-    sample_path = PROJECT_ROOT / "data" / "sample emails" / "legitimate_html.txt"
-    links = extract_links(sample_path.read_text(encoding="utf-8"))
+    if not SAMPLE_HTML_EMAIL.exists():
+        pytest.skip("legitimate_html.txt sample email is not available")
+
+    links = extract_links(SAMPLE_HTML_EMAIL.read_text(encoding="utf-8"))
 
     assert {
         "text": "candidate dashboard",
@@ -90,8 +97,10 @@ def test_html_helpers_return_empty_values_for_invalid_input():
 
 
 def test_html_to_text_uses_decoded_html_body_from_raw_email():
-    sample_path = PROJECT_ROOT / "data" / "sample emails" / "legitimate_html.txt"
-    text = html_to_text(sample_path.read_text(encoding="utf-8"))
+    if not SAMPLE_HTML_EMAIL.exists():
+        pytest.skip("legitimate_html.txt sample email is not available")
+
+    text = html_to_text(SAMPLE_HTML_EMAIL.read_text(encoding="utf-8"))
 
     assert text.startswith("Dear Brian,")
     assert "Delivered-To:" not in text
@@ -110,3 +119,5 @@ if __name__ == "__main__":
     test_html_to_text_returns_basic_text()
     test_html_helpers_return_empty_values_for_invalid_input()
     test_html_to_text_uses_decoded_html_body_from_raw_email()
+    if SAMPLE_HTML_EMAIL.exists():
+        print(html_to_text(SAMPLE_HTML_EMAIL.read_text(encoding="utf-8")))

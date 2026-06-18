@@ -143,7 +143,7 @@ def _find_phrase(email_text: str, phrases: list[str]) -> str | None:
 
 
 ## Analyze email text for deterministic phishing indicators
-def analyze_rules(email_text: str) -> list[dict]:
+def analyze_language_rules(email_text: str) -> list[dict]:
     if not isinstance(email_text, str) or not email_text.strip():
         return []
 
@@ -155,7 +155,8 @@ def analyze_rules(email_text: str) -> list[dict]:
         if matched_phrase:
             findings.append(
                 {
-                    "rule": rule_name,
+                    "type": "language",
+                    "subtype": rule_name,
                     "severity": severity,
                     "evidence": matched_phrase,
                 }

@@ -6,72 +6,79 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.security.rules import analyze_rules
+from src.security.language_rules import analyze_language_rules
 
 
-def test_analyze_rules_returns_structured_findings():
+def test_analyze_language_rules_returns_structured_findings():
     email_text = (
         "URGENT ACTION REQUIRED. Verify your account and enter your credentials. "
         "Your payment is overdue, and your password will expire soon."
     )
 
-    assert analyze_rules(email_text) == [
+    assert analyze_language_rules(email_text) == [
         {
-            "rule": "urgent_language",
+            "type": "language",
+            "subtype": "urgent",
             "severity": "medium",
-            "evidence": "Found phrase: urgent action required",
+            "evidence": "urgent action required",
         },
         {
-            "rule": "credential_request",
+            "type": "language",
+            "subtype": "credential_request",
             "severity": "high",
-            "evidence": "Found phrase: enter your credentials",
+            "evidence": "enter your credentials",
         },
         {
-            "rule": "account_verification",
+            "type": "language",
+            "subtype": "account_verification",
             "severity": "medium",
-            "evidence": "Found phrase: verify your account",
+            "evidence": "verify your account",
         },
         {
-            "rule": "payment_or_invoice_language",
+            "type": "language",
+            "subtype": "payment_or_invoice_language",
             "severity": "medium",
-            "evidence": "Found phrase: payment is overdue",
+            "evidence": "payment is overdue",
         },
         {
-            "rule": "password_reset_or_expiration",
+            "type": "language",
+            "subtype": "password_reset_or_expiration",
             "severity": "medium",
-            "evidence": "Found phrase: password will expire",
+            "evidence": "password will expire",
         },
     ]
     print("[TEST] rules return structured findings")
 
 
-def test_analyze_rules_is_case_insensitive_and_normalizes_whitespace():
+def test_analyze_language_rules_is_case_insensitive_and_normalizes_whitespace():
     email_text = "Please VERIFY\n\tYOUR ACCOUNT within 24 hours."
 
-    assert analyze_rules(email_text) == [
+    assert analyze_language_rules(email_text) == [
         {
-            "rule": "urgent_language",
+            "type": "language",
+            "subtype": "urgent",
             "severity": "medium",
-            "evidence": "Found phrase: within 24 hours",
+            "evidence": "within 24 hours",
         },
         {
-            "rule": "account_verification",
+            "type": "language",
+            "subtype": "account_verification",
             "severity": "medium",
-            "evidence": "Found phrase: verify your account",
+            "evidence": "verify your account",
         },
     ]
     print("[TEST] rules normalize whitespace/capitals")
 
 
-def test_analyze_rules_returns_empty_list_for_no_matches_or_invalid_text():
-    assert analyze_rules("Here are the meeting notes from today.") == []
-    assert analyze_rules("") == []
-    assert analyze_rules(None) == []
+def test_analyze_language_rules_returns_empty_list_for_no_matches_or_invalid_text():
+    assert analyze_language_rules("Here are the meeting notes from today.") == []
+    assert analyze_language_rules("") == []
+    assert analyze_language_rules(None) == []
     print("[TEST] rules return empty list when text has no indicators")
 
 
 if __name__ == "__main__":
-    test_analyze_rules_returns_structured_findings()
-    test_analyze_rules_is_case_insensitive_and_normalizes_whitespace()
-    test_analyze_rules_returns_empty_list_for_no_matches_or_invalid_text()
+    test_analyze_language_rules_returns_structured_findings()
+    test_analyze_language_rules_is_case_insensitive_and_normalizes_whitespace()
+    test_analyze_language_rules_returns_empty_list_for_no_matches_or_invalid_text()
     

@@ -1,1 +1,0 @@
-# stores supsicious words, inidcators, patterns, etc

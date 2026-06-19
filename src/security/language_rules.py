@@ -12,6 +12,8 @@ URGENT_TERMS = [
     "time-sensitive",
     "urgent",
     "immediately",
+    "the sooner you act",
+    "act now",
 ]
 
 CREDENTIAL_REQUEST_TERMS = [
@@ -25,6 +27,7 @@ CREDENTIAL_REQUEST_TERMS = [
     "login credentials",
     "sign in to confirm",
     "log in to confirm",
+    "confirm your info",
 ]
 
 ACCOUNT_VERIFICATION_TERMS = [
@@ -104,10 +107,12 @@ LINK_CLICK_TERMS = [
     "confirm by clicking",
     "login here",
     "sign in here",
+    "click below",
 ]
 
 REWARD_OR_REFUND_TERMS = [
     "you have won",
+    "you've won",
     "congratulations",
     "claim your prize",
     "claim your reward",
@@ -118,6 +123,9 @@ REWARD_OR_REFUND_TERMS = [
     "claim your refund",
     "rebate available",
     "you are eligible",
+    "you're eligible",
+    "you've been selected",
+    "payout",
 ]
 
 
@@ -158,7 +166,7 @@ def analyze_language_rules(email_text: str) -> list[dict]:
                     "type": "language",
                     "subtype": rule_name,
                     "severity": severity,
-                    "evidence": matched_phrase,
+                    "evidence": f"suspicious language detected: \"{matched_phrase}\"",
                 }
             )
 

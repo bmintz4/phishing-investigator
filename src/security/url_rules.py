@@ -17,6 +17,15 @@ def analyze_url_rules(html: str) -> list[dict]:
                     "evidence": address,
                 }
             )
+        elif text and len(text) > 100:
+            findings.append(
+                {
+                    "type": "URL",
+                    "subtype": "deceptive URL length",
+                    "severity": "medium",
+                    "evidence": f"Text: {text}",
+                }
+            )
         elif text and _normalize_for_match(text) not in _normalize_for_match(address):
             findings.append(
                 {
@@ -24,15 +33,6 @@ def analyze_url_rules(html: str) -> list[dict]:
                     "subtype": "name mismatch",
                     "severity": "low",
                     "evidence": f"Text: {text}\nAddress: {address}",
-                }
-            )
-        else:
-            findings.append(
-                {
-                    "type": "URL",
-                    "subtype": "found",
-                    "severity": "none",
-                    "evidence": address,
                 }
             )
 

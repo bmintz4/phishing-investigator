@@ -10,6 +10,7 @@ from src.models.predict import predict_email
 from src.ingestion.html_email import html_to_text
 from src.security.language_rules import analyze_language_rules
 from src.security.url_rules import analyze_url_rules
+from src.security.score_calculation import risk_rating
 
 
 SEVERITY_ORDER = {
@@ -50,6 +51,7 @@ if st.button("Analyze Email"):
             st.warning("The pasted HTML did not contain text to analyze.")
             st.stop()
 
+        ## combine relevant security rule lists together 
         with st.spinner("Looking for common indicators..."):
             rules_list = analyze_language_rules(text)
             if input_format == "HTML":
@@ -58,8 +60,37 @@ if st.button("Analyze Email"):
             rules_list.sort(key=lambda rule: SEVERITY_ORDER[rule["severity"]])
 
         with st.spinner("Analyzing email..."):
-            result = predict_email(text)
+            ml_result = predict_email(text)
 
+        ml_risk = round(float(ml_result["probability"]) * 100)
+        overall_risk_rating, rule_risk = risk_rating(rules_list, ml_risk)
+        overall_risk_rating = round(overall_risk_rating)
+
+        ## display overall risk level, rule risk level, and ml risk level
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Overall Risk Score", f"{overall_risk_rating}%")
+        col1.caption("Combined, weighted risk scores from security rules and language model")
+        col2.metric("Security Rule Score", f"{rule_risk}%")
+        col2.caption("Rules-based risk score derived from common phishing indicators")
+        col3.metric("Model Risk Score", f"{ml_risk}%")
+        col3.caption("Risk score derived from machine learning language analysis")
+
+        ## Overall Risk Level claim & basic explanation
+        if overall_risk_rating < 30:
+            st.subheader("Overall Risk Level: low")
+            st.text("Email is very likely legitimate")
+        elif overall_risk_rating < 60:
+            st.subheader("Overall Risk Level: moderate")
+            st.text("Email is likely legitimate, but proceed with caution")
+        elif overall_risk_rating < 85:
+            st.subheader("Overall Risk Level: high")
+            st.text("Email has a significant chance of being malicious, proceed with caution")
+        else:
+            st.subheader("Overall Risk Level: critical")
+            st.text("Email is very likely malicious")
+        st.divider()
+
+        ## print security rule findings in order of severity
         for rule in rules_list:
             rule_type = rule["type"]
             rule_subtype = rule["subtype"].replace("_", " ")
@@ -69,12 +100,3 @@ if st.button("Analyze Email"):
                 color=SEVERITY_COLORS[severity],
             )
             st.text(rule["evidence"])
-
-        if result["label"] == "phishing":
-            st.badge("Likely Phishing", color="red")
-
-        else:
-            st.badge("Likely Legitimate", color="blue")
-
-        prob = "Probability: " + str(result["probability"] * 100)[:5] + "%"
-        st.badge(prob, color="gray")

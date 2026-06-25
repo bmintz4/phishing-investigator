@@ -6,8 +6,8 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
-from src.models.predict import predict_email
-from src.ingestion.html_email import html_to_text
+from src.models.predict import predict_email, predict_structured
+from src.ingestion.html_email import html_to_text, parse_html_email_to_record
 from src.security.language_rules import analyze_language_rules
 from src.security.url_rules import analyze_url_rules
 from src.security.score_calculation import risk_rating
@@ -37,7 +37,7 @@ input_format = st.radio(
     ["Text", "HTML"],
     horizontal=True,
 )
-email_input = st.text_area(f"Paste {input_format.lower()} here:")
+email_input = st.text_area(f"Paste {input_format.lower()} Here:")
 
 if st.button("Analyze Email"):
     raw_input = email_input.strip()
@@ -60,7 +60,10 @@ if st.button("Analyze Email"):
             rules_list.sort(key=lambda rule: SEVERITY_ORDER[rule["severity"]])
 
         with st.spinner("Analyzing email..."):
-            ml_result = predict_email(text)
+            if input_format == "HTML":
+                ml_result = predict_structured(parse_html_email_to_record(raw_input))
+            else:
+                ml_result = predict_email(text)
 
         ml_risk = round(float(ml_result["probability"]) * 100)
         overall_risk_rating, rule_risk = risk_rating(rules_list, ml_risk)

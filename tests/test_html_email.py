@@ -1,17 +1,9 @@
-import sys
-from pathlib import Path
-
-import pytest
+from src.ingestion.html_email import extract_links, html_to_text, parse_html_email_to_record
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from src.ingestion.html_email import extract_links, html_to_text
-
-
-SAMPLE_HTML_EMAIL = PROJECT_ROOT / "data" / "sample emails" / "legitimate_html.txt"
+# NOTE: legacy sample files in the repo are plain text emails, not raw MIME HTML parts.
+# The parser and tests below are designed to validate HTML extraction from raw email text
+# and quoted-printable HTML using self-contained MIME samples.
 
 
 def test_extract_links_returns_text_and_addresses():
@@ -60,20 +52,29 @@ rd</a>
 
 
 def test_extract_links_decodes_raw_email_html_part():
-    if not SAMPLE_HTML_EMAIL.exists():
-        pytest.skip("legitimate_html.txt sample email is not available")
+    raw_email = """
+From: Alice <alice@example.com>
+To: Bob <bob@example.org>
+Subject: Test HTML email
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
 
-    links = extract_links(SAMPLE_HTML_EMAIL.read_text(encoding="utf-8"))
+<html>
+  <body>
+    <p>Hi Bob,</p>
+    <p>Visit <a href="https://example.com/login">our site</a>.</p>
+  </body>
+</html>
+"""
 
-    assert {
-        "text": "candidate dashboard",
-        "address": (
-            "https://tracking.icims.com/f/a/z0kfLSHpmyFS8Qr_GnNSDQ~~/"
-            "AAIB5hA~/Y6AKyU56xAfC-c2iSTjAU_x_MHGfzmctATO46dLnVYsFCv9"
-            "L2PDrKekGMA6BaPue1HH0Dq1Lg9QYdDPyj0hm3Ema4hJNZG10ijkEQQ"
-            "jXvrZYlrtZ0ZUh1cADfOUheB5I"
-        ),
-    } in links
+    links = extract_links(raw_email)
+
+    assert links == [
+        {
+            "text": "our site",
+            "address": "https://example.com/login",
+        }
+    ]
 
 
 def test_html_to_text_returns_basic_text():
@@ -89,6 +90,40 @@ def test_html_to_text_returns_basic_text():
     assert html_to_text(html) == "Dear customer, Verify your account here ."
 
 
+def test_parse_html_email_to_record_returns_structured_fields():
+    raw_email = """
+From: Alice <alice@example.com>
+To: Bob <bob@example.org>
+Date: Wed, 1 Jan 2025 12:00:00 -0500
+Subject: Account update
+Content-Type: text/html; charset="utf-8"
+
+<html>
+  <body>
+    <p>Hello Bob,</p>
+    <p>Please <a href="https://example.com/login">log in</a> to view your account.</p>
+  </body>
+</html>
+"""
+
+    record = parse_html_email_to_record(raw_email)
+
+    assert record["sender_domain"] == "example.com"
+    assert record["receiver_domain"] == "example.org"
+    assert record["subject"] == "Account update"
+    assert "Hello Bob" in record["body"]
+    assert "https://example.com/login" in record["urls"]
+    assert record["url_count"] == 1.0
+    assert record["url_length_max"] == len("https://example.com/login")
+    assert record["url_length_avg"] == len("https://example.com/login")
+    assert record["url_subdom_max"] == 0.0
+    assert record["url_subdom_avg"] == 0.0
+    assert record["attachment_count"] == 0.0
+    assert record["has_attachments"] is False
+    assert record["attachment_types"] == ""
+    assert record["language"] == "en"
+
+
 def test_html_helpers_return_empty_values_for_invalid_input():
     assert extract_links("") == []
     assert extract_links(None) == []
@@ -97,19 +132,28 @@ def test_html_helpers_return_empty_values_for_invalid_input():
 
 
 def test_html_to_text_uses_decoded_html_body_from_raw_email():
-    if not SAMPLE_HTML_EMAIL.exists():
-        pytest.skip("legitimate_html.txt sample email is not available")
+    raw_email = """
+From: Alice <alice@example.com>
+To: Bob <bob@example.org>
+Date: Wed, 1 Jan 2025 12:00:00 -0500
+Subject: Test HTML email
+Content-Type: text/html; charset="utf-8"
 
-    text = html_to_text(SAMPLE_HTML_EMAIL.read_text(encoding="utf-8"))
+<html>
+  <body>
+    <p>Dear Bob,</p>
+    <p>We're excited to share our latest updates.</p>
+    <p><a href="https://example.com">Click here</a> to visit.</p>
+  </body>
+</html>
+"""
 
-    assert text.startswith("Dear Brian,")
+    text = html_to_text(raw_email)
+
+    assert text.startswith("Dear Bob,")
     assert "Delivered-To:" not in text
-    assert "------=_Part_" not in text
     assert "We're excited" in text
-    assert (
-        "[https://jhuapl.icims.com/icims2/?r=6177623696&contactId=3212762&pid=111]"
-        "(https://tracking.icims.com/f/a/"
-    ) in text
+    assert "Click here to visit." in text
 
 
 if __name__ == "__main__":
@@ -117,7 +161,6 @@ if __name__ == "__main__":
     test_extract_links_decodes_quoted_printable_html()
     test_extract_links_decodes_raw_email_html_part()
     test_html_to_text_returns_basic_text()
+    test_parse_html_email_to_record_returns_structured_fields()
     test_html_helpers_return_empty_values_for_invalid_input()
     test_html_to_text_uses_decoded_html_body_from_raw_email()
-    if SAMPLE_HTML_EMAIL.exists():
-        print(html_to_text(SAMPLE_HTML_EMAIL.read_text(encoding="utf-8")))

@@ -8,6 +8,7 @@ sys.path.append(str(PROJECT_ROOT))
 
 from src.models.predict import predict_email, predict_structured
 from src.ingestion.html_email import html_to_text, parse_html_email_to_record
+from src.ingestion.html_email_sanitizer import parse_html_email_to_sanitized_record
 from src.security.language_rules import analyze_language_rules
 from src.security.url_rules import analyze_url_rules
 from src.security.score_calculation import risk_rating
@@ -61,7 +62,8 @@ if st.button("Analyze Email"):
 
         with st.spinner("Analyzing email..."):
             if input_format == "HTML":
-                ml_result = predict_structured(parse_html_email_to_record(raw_input))
+                ## ml_result = predict_structured(parse_html_email_to_record(raw_input))
+                ml_result = predict_structured(parse_html_email_to_sanitized_record(raw_input))
             else:
                 ml_result = predict_email(text)
 

@@ -12,6 +12,7 @@ from src.ingestion.html_email_sanitizer import parse_html_email_to_sanitized_rec
 from src.security.language_rules import analyze_language_rules
 from src.security.url_rules import analyze_url_rules
 from src.security.score_calculation import risk_rating
+from src.intel.url_reputation import analyze_url_reputation
 
 
 SEVERITY_ORDER = {
@@ -60,6 +61,20 @@ if st.button("Analyze Email"):
 
             rules_list.sort(key=lambda rule: SEVERITY_ORDER[rule["severity"]])
 
+        url_reputation = []
+        if input_format == "HTML":
+            with st.spinner("Checking URL reputation..."):
+                api_key = ""
+                try:
+                    api_key = st.secrets.get("VIRUSTOTAL_API_KEY", "")
+                except FileNotFoundError:
+                    pass
+
+                try:
+                    url_reputation = analyze_url_reputation(raw_input, api_key)
+                except ValueError as exc:
+                    st.warning(str(exc))
+
         with st.spinner("Analyzing email..."):
             if input_format == "HTML":
                 ## ml_result = predict_structured(parse_html_email_to_record(raw_input))
@@ -94,6 +109,11 @@ if st.button("Analyze Email"):
             st.subheader("Overall Risk Level: critical")
             st.text("Email is very likely malicious")
         st.divider()
+
+        if input_format == "HTML":
+            st.subheader("URL Reputation")
+            st.write(url_reputation)
+            st.divider()
 
         ## print security rule findings in order of severity
         for rule in rules_list:

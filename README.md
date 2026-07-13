@@ -53,7 +53,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 5. Run the Streamlit app
+### 5. Add your VirusTotal API key
+
+Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`, then replace the placeholder with your key.
+
+### 6. Run the Streamlit app
 
 ```bash
 streamlit run app/streamlit_app.py

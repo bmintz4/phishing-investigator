@@ -11,7 +11,7 @@ from src.ingestion.html_email import html_to_text, parse_html_email_to_record
 from src.ingestion.html_email_sanitizer import parse_html_email_to_sanitized_record
 from src.security.language_rules import analyze_language_rules
 from src.security.url_rules import analyze_url_rules
-from src.security.score_calculation import risk_rating
+from src.security.score_calculation import risk_rating, risk_rating_url
 from src.intel.url_reputation import analyze_url_reputation
 
 
@@ -53,6 +53,7 @@ if st.button("Analyze Email"):
             st.warning("The pasted HTML did not contain text to analyze.")
             st.stop()
 
+
         ## combine relevant security rule lists together 
         with st.spinner("Looking for common indicators..."):
             rules_list = analyze_language_rules(text)
@@ -61,7 +62,10 @@ if st.button("Analyze Email"):
 
             rules_list.sort(key=lambda rule: SEVERITY_ORDER[rule["severity"]])
 
+
+        ## call VirusTotal API to check URL reputation
         url_reputation = []
+        VirusTotal_API_called = False
         if input_format == "HTML":
             with st.spinner("Checking URL reputation..."):
                 api_key = ""
@@ -69,12 +73,15 @@ if st.button("Analyze Email"):
                     api_key = st.secrets.get("VIRUSTOTAL_API_KEY", "")
                 except FileNotFoundError:
                     pass
-
                 try:
-                    url_reputation = analyze_url_reputation(raw_input, api_key)
+                    url_reputation, VirusTotal_API_called = analyze_url_reputation(
+                        raw_input, api_key
+                    )
                 except ValueError as exc:
                     st.warning(str(exc))
 
+
+        ## analyze with ML model
         with st.spinner("Analyzing email..."):
             if input_format == "HTML":
                 ## ml_result = predict_structured(parse_html_email_to_record(raw_input))
@@ -83,17 +90,42 @@ if st.button("Analyze Email"):
                 ml_result = predict_email(text)
 
         ml_risk = round(float(ml_result["probability"]) * 100)
-        overall_risk_rating, rule_risk = risk_rating(rules_list, ml_risk)
-        overall_risk_rating = round(overall_risk_rating)
 
-        ## display overall risk level, rule risk level, and ml risk level
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Overall Risk Score", f"{overall_risk_rating}%")
-        col1.caption("Combined, weighted risk scores from security rules and language model")
-        col2.metric("Security Rule Score", f"{rule_risk}%")
-        col2.caption("Rules-based risk score derived from common phishing indicators")
-        col3.metric("Model Risk Score", f"{ml_risk}%")
-        col3.caption("Risk score derived from machine learning language analysis")
+
+        ## 2-sore or 3-score analysis, depending on whether VirusTotal API was called successfully
+        if VirusTotal_API_called:
+            overall_risk_rating, rule_risk, url_risk, worst_url = risk_rating_url(rules_list, ml_risk, url_reputation)
+            overall_risk_rating = round(overall_risk_rating)
+
+            ## display overall risk score
+            st.metric("Overall Risk Score", f"{overall_risk_rating}%")
+            st.caption("Combined, weighted risk scores from security rules, language model, and URL analysis")
+
+            ## display rule risk level, ml risk level, and URL analysis results
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Security Rule Score", f"{rule_risk}%")
+            col1.caption("Risk score derived from common phishing indicator rules")
+            col2.metric("Model Risk Score", f"{ml_risk}%")
+            col2.caption("Risk score derived from machine learning language analysis")
+            col3.metric("VirusTotal Analysis Score", f"{url_risk}%")
+            if worst_url is not None:
+                col3.caption(f"highest-risk URL: {worst_url}")
+            col3.caption("Risk score derived from  VirusTotal URL reputation analysis")
+        else:
+            overall_risk_rating, rule_risk = risk_rating(rules_list, ml_risk)
+            overall_risk_rating = round(overall_risk_rating)
+
+            ## display overall risk score
+            st.metric("Overall Risk Score", f"{overall_risk_rating}%")
+            st.caption("Combined, weighted risk scores from security rules and language model analysis")
+
+            ## display rule risk level, ml risk level, and URL analysis results
+            col1, col2 = st.columns(2)
+            col1.metric("Security Rule Score", f"{rule_risk}%")
+            col1.caption("Risk score derived from common phishing indicator rules")
+            col2.metric("Model Risk Score", f"{ml_risk}%")
+            col2.caption("Risk score derived from machine learning language analysis")
+
 
         ## Overall Risk Level claim & basic explanation
         if overall_risk_rating < 30:

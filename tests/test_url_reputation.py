@@ -60,13 +60,14 @@ class FakeHttpClient:
 
 
 def analyze(html, client):
-    return analyze_url_reputation(
+    results, _ = analyze_url_reputation(
         html,
         "test-key",
         http_client=client,
         cache=ReputationCache(),
         rate_limiter=CallRateLimiter(),
     )
+    return results
 
 
 def test_url_info_uses_unpadded_base64_id_and_api_key_header():
@@ -107,7 +108,7 @@ def test_duplicate_urls_are_ignored_and_two_unique_urls_are_both_analyzed():
         "https://example.com/a",
         "https://example.com/b",
     ]
-    assert [result["Status"] for result in results] == ["Analyzed", "Analyzed"]
+    assert [result["status"] for result in results] == ["Analyzed", "Analyzed"]
 
 
 def test_more_than_two_urls_are_analyzed_once_per_domain_and_cloned():
@@ -121,12 +122,12 @@ def test_more_than_two_urls_are_analyzed_once_per_domain_and_cloned():
     results = analyze(html, client)
 
     assert len(client.calls) == 2
-    assert [result["Status"] for result in results] == [
+    assert [result["status"] for result in results] == [
         "Analyzed",
         "Clone",
         "Analyzed",
     ]
-    assert results[1]["Last Analysis Stats"] == results[0]["Last Analysis Stats"]
+    assert results[1]["last analysis stats"] == results[0]["last analysis stats"]
 
 
 def test_only_first_four_domains_are_called_and_the_rest_are_untested():
@@ -139,7 +140,7 @@ def test_only_first_four_domains_are_called_and_the_rest_are_untested():
     results = analyze(html, client)
 
     assert len(client.calls) == 4
-    assert [result["Status"] for result in results] == [
+    assert [result["status"] for result in results] == [
         "Analyzed",
         "Analyzed",
         "Analyzed",
@@ -147,7 +148,7 @@ def test_only_first_four_domains_are_called_and_the_rest_are_untested():
         "Untested",
         "Untested",
     ]
-    assert results[-1]["Last Analysis Stats"] is None
+    assert results[-1]["last analysis stats"] is None
 
 
 def test_non_web_links_are_not_sent_to_virustotal():
@@ -161,6 +162,33 @@ def test_non_web_links_are_not_sent_to_virustotal():
     assert client.calls == []
 
 
+def test_no_web_links_reports_that_nothing_was_analyzed():
+    results, any_analyzed = analyze_url_reputation(
+        '<a href="mailto:help@example.com">email</a>',
+        "test-key",
+        http_client=FakeHttpClient(),
+        cache=ReputationCache(),
+        rate_limiter=CallRateLimiter(),
+    )
+
+    assert results == []
+    assert any_analyzed is False
+
+
+def test_quota_skipped_url_reports_that_nothing_was_analyzed():
+    results, any_analyzed = analyze_url_reputation(
+        '<a href="https://example.com/login">login</a>',
+        "test-key",
+        http_client=FakeHttpClient(),
+        cache=ReputationCache(),
+        rate_limiter=CallRateLimiter(max_calls=0),
+    )
+
+    assert results[0]["status"] == "Untested"
+    assert results[0]["last analysis stats"] is None
+    assert any_analyzed is False
+
+
 def test_visible_url_in_html_is_analyzed_without_an_anchor():
     client = FakeHttpClient()
 
@@ -168,7 +196,7 @@ def test_visible_url_in_html_is_analyzed_without_an_anchor():
 
     assert len(client.calls) == 1
     assert results[0]["URL"] == "https://example.com/login"
-    assert results[0]["Status"] == "Analyzed"
+    assert results[0]["status"] == "Analyzed"
 
 
 def test_repeated_url_uses_cached_stats_without_another_api_call():
@@ -177,14 +205,14 @@ def test_repeated_url_uses_cached_stats_without_another_api_call():
     limiter = CallRateLimiter()
     html = '<a href="https://example.com/login">login</a>'
 
-    first = analyze_url_reputation(
+    first, first_analyzed = analyze_url_reputation(
         html,
         "test-key",
         http_client=client,
         cache=cache,
         rate_limiter=limiter,
     )
-    second = analyze_url_reputation(
+    second, second_analyzed = analyze_url_reputation(
         html,
         "test-key",
         http_client=client,
@@ -194,3 +222,5 @@ def test_repeated_url_uses_cached_stats_without_another_api_call():
 
     assert len(client.calls) == 1
     assert second == first
+    assert first_analyzed is True
+    assert second_analyzed is True

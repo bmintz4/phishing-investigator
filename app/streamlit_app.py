@@ -2,6 +2,7 @@ import streamlit as st
 
 from pathlib import Path
 import sys
+from urllib.parse import urlsplit
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
@@ -142,9 +143,79 @@ if st.button("Analyze Email"):
             st.text("Email is very likely malicious")
         st.divider()
 
-        if input_format == "HTML":
+        if url_reputation:
             st.subheader("URL Reputation")
-            st.write(url_reputation)
+            untested = []
+            tested_by_domain = {}
+            for result in url_reputation:
+                url = result["URL"]
+                stats = result["last analysis stats"]
+
+                # Failed and quota-limited lookups do not have usable stats.
+                if result["status"] == "untested" or stats is None:
+                    untested.append(url)
+                    if result.get("Error"):
+                        domain = (urlsplit(url).hostname or url).casefold()
+                        st.warning(
+                            f"VirusTotal could not analyze {domain}: "
+                            f"{result['Error']}"
+                        )
+                    continue
+
+                reputation_scores = {
+                    "malicious": stats.get("malicious", 0),
+                    "suspicious": stats.get("suspicious", 0),
+                    "harmless": stats.get("harmless", 0),
+                    "undetected": stats.get("undetected", 0),
+                }
+                highest_reputation, highest_score = max(
+                    reputation_scores.items(), key=lambda item: item[1]
+                )
+
+                # A result with no classifications is not meaningfully tested.
+                if highest_score == 0:
+                    untested.append(url)
+                    continue
+
+                domain = (urlsplit(url).hostname or url).casefold()
+                group = tested_by_domain.setdefault(
+                    domain,
+                    {
+                        "status": "analyzed",
+                        "reputation": highest_reputation,
+                        "score": highest_score,
+                        "urls": [],
+                        "clone_count": 0,
+                    },
+                )
+                group["urls"].append(url)
+                if result["status"] == "clone":
+                    group["clone_count"] += 1
+                if result["status"] == "analyzed":
+                    group["status"] = "analyzed"
+                    group["reputation"] = highest_reputation
+                    group["score"] = highest_score
+
+            for domain, group in tested_by_domain.items():
+                clone_label = (
+                    f" + {group['clone_count']} clone"
+                    f"{'s' if group['clone_count'] != 1 else ''}"
+                    if group["clone_count"]
+                    else ""
+                )
+                st.write(f"**{domain}** — {group['status']}{clone_label}")
+                st.write(
+                    f"Analysis: {group['reputation']} "
+                    f"({group['score']} engines)"
+                )
+                with st.expander(f"URLs on {domain} ({len(group['urls'])})"):
+                    for link in group["urls"]:
+                        st.write(link)
+
+            if untested:
+                st.write("Untested URLs:")
+                for link in untested:
+                    st.write(link)
             st.divider()
 
         ## print security rule findings in order of severity

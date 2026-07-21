@@ -8,7 +8,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.intel.cache import CallRateLimiter, ReputationCache
-from src.intel.url_reputation import analyze_url_reputation, get_url_analysis_stats
+from src.intel.url_reputation import (
+    analyze_url_reputation,
+    get_domain_analysis_stats,
+    get_url_analysis_stats,
+)
 
 
 STATS = {
@@ -93,7 +97,23 @@ def test_url_info_uses_unpadded_base64_id_and_api_key_header():
     }
 
 
-def test_duplicate_urls_are_ignored_and_two_unique_urls_are_both_analyzed():
+def test_domain_info_uses_hostname_endpoint_and_api_key_header():
+    client = FakeHttpClient()
+
+    result = get_domain_analysis_stats(
+        "subdomain.example.com", "secret", http_client=client
+    )
+
+    assert client.calls == [
+        (
+            "https://www.virustotal.com/api/v3/domains/subdomain.example.com",
+            {"headers": {"x-apikey": "secret"}, "timeout": 10},
+        )
+    ]
+    assert result == STATS
+
+
+def test_duplicate_urls_are_ignored_and_same_domain_urls_are_cloned():
     client = FakeHttpClient()
     html = """
     <a href="https://example.com/a">one</a>
@@ -103,12 +123,12 @@ def test_duplicate_urls_are_ignored_and_two_unique_urls_are_both_analyzed():
 
     results = analyze(html, client)
 
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
     assert [result["URL"] for result in results] == [
         "https://example.com/a",
         "https://example.com/b",
     ]
-    assert [result["status"] for result in results] == ["Analyzed", "Analyzed"]
+    assert [result["status"] for result in results] == ["analyzed", "clone"]
 
 
 def test_more_than_two_urls_are_analyzed_once_per_domain_and_cloned():
@@ -123,9 +143,9 @@ def test_more_than_two_urls_are_analyzed_once_per_domain_and_cloned():
 
     assert len(client.calls) == 2
     assert [result["status"] for result in results] == [
-        "Analyzed",
-        "Clone",
-        "Analyzed",
+        "analyzed",
+        "clone",
+        "analyzed",
     ]
     assert results[1]["last analysis stats"] == results[0]["last analysis stats"]
 
@@ -141,12 +161,12 @@ def test_only_first_four_domains_are_called_and_the_rest_are_untested():
 
     assert len(client.calls) == 4
     assert [result["status"] for result in results] == [
-        "Analyzed",
-        "Analyzed",
-        "Analyzed",
-        "Analyzed",
-        "Untested",
-        "Untested",
+        "analyzed",
+        "analyzed",
+        "analyzed",
+        "analyzed",
+        "untested",
+        "untested",
     ]
     assert results[-1]["last analysis stats"] is None
 
@@ -184,7 +204,7 @@ def test_quota_skipped_url_reports_that_nothing_was_analyzed():
         rate_limiter=CallRateLimiter(max_calls=0),
     )
 
-    assert results[0]["status"] == "Untested"
+    assert results[0]["status"] == "untested"
     assert results[0]["last analysis stats"] is None
     assert any_analyzed is False
 
@@ -196,7 +216,7 @@ def test_visible_url_in_html_is_analyzed_without_an_anchor():
 
     assert len(client.calls) == 1
     assert results[0]["URL"] == "https://example.com/login"
-    assert results[0]["status"] == "Analyzed"
+    assert results[0]["status"] == "analyzed"
 
 
 def test_repeated_url_uses_cached_stats_without_another_api_call():

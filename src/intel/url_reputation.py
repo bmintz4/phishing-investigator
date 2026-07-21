@@ -13,12 +13,12 @@ import requests
 from src.ingestion.html_email import URL_REGEX, extract_links, html_to_text
 from src.intel.cache import (
     DEFAULT_REPUTATION_CACHE,
-    VIRUSTOTAL_RATE_LIMITER,
     CallRateLimiter,
     ReputationCache,
 )
 
 VIRUSTOTAL_URL_ENDPOINT = "https://www.virustotal.com/api/v3/urls/{url_id}"
+VIRUSTOTAL_DOMAIN_ENDPOINT = "https://www.virustotal.com/api/v3/domains/{domain}"
 STAT_NAMES = ("harmless", "malicious", "suspicious", "undetected", "timeout")
 
 
@@ -28,14 +28,13 @@ def analyze_url_reputation(
     *,
     http_client: Any = requests,
     cache: ReputationCache = DEFAULT_REPUTATION_CACHE,
-    rate_limiter: CallRateLimiter = VIRUSTOTAL_RATE_LIMITER,
+    rate_limiter: CallRateLimiter | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Analyze unique HTTP(S) links and report whether any produced stats.
 
-    With at most two URLs, each URL is looked up. With more than two, the first
-    URL from each of the first four hostnames is looked up and its statistics
-    are copied to the remaining URLs on that hostname. The returned boolean is
-    false when no URL has usable analysis statistics.
+    The first URL from each of the first four hostnames is looked up and its
+    statistics are copied to the remaining URLs on that hostname. The returned
+    boolean is false when no URL has usable analysis statistics.
     """
     urls = _extract_unique_web_urls(raw_html)
     if not urls:
@@ -48,38 +47,37 @@ def analyze_url_reputation(
             ".streamlit/secrets.toml or in the environment."
         )
 
-    if len(urls) <= 2:
-        results = [
-            _analyze_one(url, key, http_client, cache, rate_limiter)
-            for url in urls
-        ]
-        return results, _has_analyzed_url(results)
+    # Each submitted email gets its own four-request budget. A module-level
+    # limiter caused previous Streamlit reruns to make new domains appear
+    # untested even when the current email needed fewer than four lookups.
+    if rate_limiter is None:
+        rate_limiter = CallRateLimiter(max_calls=4)
 
     urls_by_domain: OrderedDict[str, list[str]] = OrderedDict()
     for url in urls:
         urls_by_domain.setdefault(_domain_for_url(url), []).append(url)
 
     results_by_url: dict[str, dict[str, Any]] = {}
-    for domain_urls in list(urls_by_domain.values())[:4]:
+    for domain, domain_urls in list(urls_by_domain.items())[:4]:
         representative = domain_urls[0]
-        analyzed = _analyze_one(
-            representative, key, http_client, cache, rate_limiter
+        analyzed = _analyze_domain(
+            domain, representative, key, http_client, cache, rate_limiter
         )
         results_by_url[representative] = analyzed
 
-        if analyzed["status"] == "Untested":
+        if analyzed["status"] == "untested":
             for url in domain_urls[1:]:
-                results_by_url[url] = _result(url, "Untested", None)
+                results_by_url[url] = _result(url, "untested", None)
             continue
 
         for url in domain_urls[1:]:
             results_by_url[url] = _result(
-                url, "Clone", analyzed["last analysis stats"]
+                url, "clone", analyzed["last analysis stats"]
             )
 
     for domain_urls in list(urls_by_domain.values())[4:]:
         for url in domain_urls:
-            results_by_url[url] = _result(url, "Untested", None)
+            results_by_url[url] = _result(url, "untested", None)
 
     results = [results_by_url[url] for url in urls]
     return results, _has_analyzed_url(results)
@@ -113,29 +111,58 @@ def get_url_analysis_stats(
     return {name: int(stats.get(name, 0)) for name in STAT_NAMES}
 
 
-def _analyze_one(
-    url: str,
+def get_domain_analysis_stats(
+    domain: str,
+    api_key: str,
+    *,
+    http_client: Any = requests,
+    timeout: float = 10,
+) -> dict[str, int]:
+    """Fetch and normalize ``last_analysis_stats`` for one hostname."""
+    response = http_client.get(
+        VIRUSTOTAL_DOMAIN_ENDPOINT.format(domain=domain),
+        headers={"x-apikey": api_key},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+
+    try:
+        stats = response.json()["data"]["attributes"]["last_analysis_stats"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "VirusTotal domain response did not contain last_analysis_stats"
+        ) from exc
+
+    return {name: int(stats.get(name, 0)) for name in STAT_NAMES}
+
+
+def _analyze_domain(
+    domain: str,
+    representative_url: str,
     api_key: str,
     http_client: Any,
     cache: ReputationCache,
     rate_limiter: CallRateLimiter,
 ) -> dict[str, Any]:
-    cached = cache.get(url)
+    cache_key = f"domain:{domain}"
+    cached = cache.get(cache_key)
     if cached is not None:
-        return _result(url, "Analyzed", cached)
+        return _result(representative_url, "analyzed", cached)
 
     if not rate_limiter.try_acquire():
-        return _result(url, "Untested", None)
+        return _result(representative_url, "untested", None)
 
     try:
-        stats = get_url_analysis_stats(url, api_key, http_client=http_client)
+        stats = get_domain_analysis_stats(
+            domain, api_key, http_client=http_client
+        )
     except (requests.RequestException, ValueError) as exc:
-        result = _result(url, "Analyzed", None)
+        result = _result(representative_url, "untested", None)
         result["Error"] = str(exc)
         return result
 
-    cache.set(url, stats)
-    return _result(url, "Analyzed", stats)
+    cache.set(cache_key, stats)
+    return _result(representative_url, "analyzed", stats)
 
 
 def _extract_unique_web_urls(raw_html: str) -> list[str]:

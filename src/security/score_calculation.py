@@ -63,11 +63,9 @@ def risk_rating_url(rules: list[dict], ml_score: int, url_reputation: list[dict]
     for url in url_reputation:
         if url["last analysis stats"] is None:
             continue
-        malicious, suspicious, harmless, undetected = 0, 0, 0, 0
-        malicious += url["last analysis stats"]["malicious"]
-        suspicious += url["last analysis stats"]["suspicious"]
-        harmless += url["last analysis stats"]["harmless"]
-        undetected += url["last analysis stats"]["undetected"]
+        malicious = url["last analysis stats"]["malicious"]
+        suspicious = url["last analysis stats"]["suspicious"]
+        harmless = url["last analysis stats"]["harmless"]
         url_score = round((malicious * 2 + suspicious) / (harmless + malicious + suspicious if harmless + malicious + suspicious else 1) * 100)
         if url_score > url_score_max:
             url_score_max = url_score
